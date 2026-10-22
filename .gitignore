@@ -1,0 +1,46 @@
+# Flutter and Dart generated files
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/build/
+**/coverage/
+
+# Android generated files
+**/.gradle/
+**/.kotlin/
+**/local.properties
+**/*.iml
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+
+# IDE files
+.idea/
+.vscode/
+*.ipr
+*.iws
+
+# Local credentials, captures and personal data
+.env
+.env.*
+captcha.png
+course_schedule.json
+schedule_debug.html
+PROJECT_LOCATION.md
+srrz_qr*.png
+wechat_login_qr*.png
+wechat_oauth_qr*.png
+chaoxing*.png
+
+# Local version archives and binary artifacts
+release_archive/
+重外小助手.apk
+重外小助手.apk.sha256
+课表.apk
+课表.apk.sha256
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.log
