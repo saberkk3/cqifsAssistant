@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
 import '../app_theme.dart';
@@ -397,7 +398,19 @@ class SettingsScreen extends StatelessWidget {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 title: const Text('重外小助手'),
-                subtitle: const Text('版本 2.2.1 · Android + Flutter'),
+                subtitle: const Text('版本 2.2.2 · Android + Flutter'),
+              ),
+              const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.code_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                title: const Text('GitHub 项目'),
+                subtitle: const Text('saberkk3/cqifsAssistant'),
+                trailing: const Icon(Icons.open_in_new_rounded),
+                onTap: () => _openGithub(context),
               ),
               const Divider(),
               Padding(
@@ -461,6 +474,20 @@ class SettingsScreen extends StatelessWidget {
     } catch (error) {
       if (context.mounted) {
         _showMessage(context, '选择背景图片失败：$error');
+      }
+    }
+  }
+
+  Future<void> _openGithub(BuildContext context) async {
+    final uri = Uri.parse('https://github.com/saberkk3/cqifsAssistant');
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && context.mounted) {
+        _showMessage(context, '无法打开 GitHub 项目链接');
+      }
+    } catch (_) {
+      if (context.mounted) {
+        _showMessage(context, '无法打开 GitHub 项目链接');
       }
     }
   }
