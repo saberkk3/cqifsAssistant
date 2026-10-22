@@ -1,6 +1,6 @@
 # cqifsAssistant / 重外小助手
 
-重庆外语外事学院个人课表与校园生活助手，使用 Flutter + Android 开发。
+重外院个人课表与校园生活助手，使用 Flutter + Android 开发。
 
 ## 功能
 

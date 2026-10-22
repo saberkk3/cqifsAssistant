@@ -157,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       SizedBox(height: 3),
                       Text(
-                        '重庆外语外事学院',
+                        '重外院',
                         style: TextStyle(
                           color: Color(0xFFD8E9FF),
                           fontSize: 13,

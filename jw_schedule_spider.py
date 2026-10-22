@@ -1,7 +1,7 @@
 ﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-重庆外语外事学院（强智教务）课表导出脚本
+重外院（强智教务）课表导出脚本
 
 依赖：
     python -m pip install requests beautifulsoup4
@@ -333,7 +333,7 @@ def parse_schedule(html: str, term: str | None = None) -> tuple[str | None, list
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="导出重庆外语外事学院强智教务课表")
+    parser = argparse.ArgumentParser(description="导出重外院强智教务课表")
     parser.add_argument(
         "--term",
         help="学年学期，例如 2026-2027-1；不填则导出系统当前默认学期",
