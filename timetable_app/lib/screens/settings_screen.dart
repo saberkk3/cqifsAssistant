@@ -398,7 +398,7 @@ class SettingsScreen extends StatelessWidget {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 title: const Text('重外小助手'),
-                subtitle: const Text('版本 2.2.5 · Android + Flutter'),
+                subtitle: const Text('版本 2.2.6 · Android + Flutter'),
               ),
               const Divider(),
               ListTile(

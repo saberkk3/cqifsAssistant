@@ -10,7 +10,6 @@ import 'models/course.dart';
 import 'models/schedule_task.dart';
 import 'services/app_settings.dart';
 import 'services/background_service.dart';
-import 'services/home_widget_service.dart';
 import 'services/jw_client.dart';
 import 'services/notification_service.dart';
 import 'services/schedule_repository.dart';
@@ -150,8 +149,6 @@ class AppState extends ChangeNotifier {
       } catch (_) {
         // Background scheduling is best-effort.
       }
-
-      await _updateHomeWidget();
     } catch (error) {
       _error = _friendlyError(error);
     } finally {
@@ -187,7 +184,6 @@ class AppState extends ChangeNotifier {
       await notifications.requestPermissions(ReminderMode.notification);
     }
     await _rescheduleReminders();
-    await _updateHomeWidget();
     notifyListeners();
   }
 
@@ -324,7 +320,6 @@ class AppState extends ChangeNotifier {
     await prefs.remove(AppSettings.hiddenCoursesKey);
     await prefs.remove(AppSettings.tasksKey);
     await prefs.remove(AppSettings.utilitySnapshotKey);
-    await _updateHomeWidget();
     notifyListeners();
   }
 
@@ -335,7 +330,6 @@ class AppState extends ChangeNotifier {
       AppSettings.utilitySnapshotKey,
       jsonEncode(snapshot.toJson()),
     );
-    await _updateHomeWidget();
     notifyListeners();
   }
 
@@ -348,7 +342,6 @@ class AppState extends ChangeNotifier {
     }
     await _persistTasks();
     await _rescheduleReminders();
-    await _updateHomeWidget();
     notifyListeners();
   }
 
@@ -356,7 +349,6 @@ class AppState extends ChangeNotifier {
     _tasks = _tasks.where((task) => task.id != id).toList();
     await notifications.cancelTaskReminder(id);
     await _persistTasks();
-    await _updateHomeWidget();
     notifyListeners();
   }
 
@@ -369,7 +361,6 @@ class AppState extends ChangeNotifier {
     }
     await _persistCustomCourses();
     await _rescheduleReminders();
-    await _updateHomeWidget();
     notifyListeners();
   }
 
@@ -377,7 +368,6 @@ class AppState extends ChangeNotifier {
     _customCourses = _customCourses.where((course) => course.id != id).toList();
     await _persistCustomCourses();
     await _rescheduleReminders();
-    await _updateHomeWidget();
     notifyListeners();
   }
 
@@ -408,7 +398,6 @@ class AppState extends ChangeNotifier {
     await _persistCustomCourses();
     await _persistHiddenCourses();
     await _rescheduleReminders();
-    await _updateHomeWidget();
     notifyListeners();
   }
 
@@ -425,7 +414,6 @@ class AppState extends ChangeNotifier {
     await _persistCustomCourses();
     await _persistHiddenCourses();
     await _rescheduleReminders();
-    await _updateHomeWidget();
     notifyListeners();
   }
 
@@ -444,7 +432,6 @@ class AppState extends ChangeNotifier {
       _sessionExpired = false;
       _loggedIn = true;
       await _rescheduleReminders();
-      await _updateHomeWidget();
     } on SessionExpiredException catch (error) {
       _sessionExpired = true;
       _error = error.toString();
@@ -503,16 +490,6 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       // Cache reminder scheduling is best-effort.
     }
-  }
-
-  Future<void> _updateHomeWidget() async {
-    await HomeWidgetService.update(
-      courses: courses,
-      tasks: tasks,
-      week: currentWeek,
-      now: DateTime.now(),
-      utility: _utilitySnapshot,
-    );
   }
 
   Future<void> _loadCustomCourses() async {
