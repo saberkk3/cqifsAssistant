@@ -9,6 +9,7 @@ import '../services/schedule_utils.dart';
 import '../services/utility_client.dart';
 import '../widgets/course_card.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/utility_usage_sparkline.dart';
 import 'course_editor_screen.dart';
 import 'login_screen.dart';
 import 'map_screen.dart';
@@ -88,6 +89,7 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 22),
             _UtilityBalanceSection(
               snapshot: state.utilitySnapshot,
+              history: state.utilityHistory,
               onTap: onOpenUtility,
             ),
             const SizedBox(height: 22),
@@ -309,9 +311,14 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _UtilityBalanceSection extends StatelessWidget {
-  const _UtilityBalanceSection({required this.snapshot, required this.onTap});
+  const _UtilityBalanceSection({
+    required this.snapshot,
+    required this.history,
+    required this.onTap,
+  });
 
   final UtilitySnapshot? snapshot;
+  final List<UtilityHistoryPoint> history;
   final VoidCallback? onTap;
 
   @override
@@ -395,8 +402,170 @@ class _UtilityBalanceSection extends StatelessWidget {
               ),
             ],
           ),
+        if (snapshot != null) ...[
+          const SizedBox(height: 12),
+          _HomeUtilityTrendCard(history: history, onTap: onTap),
+        ],
       ],
     );
+  }
+}
+
+class _HomeUtilityTrendCard extends StatelessWidget {
+  const _HomeUtilityTrendCard({required this.history, required this.onTap});
+
+  final List<UtilityHistoryPoint> history;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = history.length > 20
+        ? history.sublist(history.length - 20)
+        : history;
+    final waterValues = visible.map((item) => item.waterRemaining).toList();
+    final electricityValues = visible
+        .map((item) => item.electricityRemaining)
+        .toList();
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: context.appCard,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: context.appBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.show_chart_rounded,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '水电用量趋势',
+                    style: TextStyle(
+                      color: context.appText,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    visible.length < 2 ? '继续刷新生成趋势' : '查看详情',
+                    style: TextStyle(color: context.appMuted, fontSize: 10),
+                  ),
+                ],
+              ),
+              if (visible.length < 2)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    '刷新水电数据两次以上后，首页会显示用量曲线。',
+                    style: TextStyle(
+                      color: context.appMuted,
+                      fontSize: 11,
+                      height: 1.5,
+                    ),
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _HomeTrendSide(
+                          label: '水',
+                          values: waterValues,
+                          start: visible.first.recordedAt,
+                          end: visible.last.recordedAt,
+                          color: const Color(0xFF1687D9),
+                          unit: '吨/天',
+                        ),
+                      ),
+                      const SizedBox(width: 18),
+                      Expanded(
+                        child: _HomeTrendSide(
+                          label: '电',
+                          values: electricityValues,
+                          start: visible.first.recordedAt,
+                          end: visible.last.recordedAt,
+                          color: const Color(0xFFE69B16),
+                          unit: '度/天',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeTrendSide extends StatelessWidget {
+  const _HomeTrendSide({
+    required this.label,
+    required this.values,
+    required this.start,
+    required this.end,
+    required this.color,
+    required this.unit,
+  });
+
+  final String label;
+  final List<double> values;
+  final DateTime start;
+  final DateTime end;
+  final Color color;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    final dailyUsage = _dailyUsage(values, start, end);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        UtilityUsageSparkline(
+          values: values,
+          color: color,
+          gridColor: context.appBorder,
+          height: 58,
+        ),
+        const SizedBox(height: 5),
+        Text(
+          dailyUsage > 0 ? '${dailyUsage.toStringAsFixed(2)} $unit' : '持续消耗不足',
+          style: TextStyle(color: context.appMuted, fontSize: 9),
+        ),
+      ],
+    );
+  }
+
+  double _dailyUsage(List<double> values, DateTime start, DateTime end) {
+    final hours = end.difference(start).inMinutes / 60;
+    if (values.length < 2 || values.first <= values.last || hours <= 0) {
+      return 0;
+    }
+    return (values.first - values.last) / (hours / 24);
   }
 }
 

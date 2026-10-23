@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app_palette.dart';
 import '../app_state.dart';
@@ -731,15 +734,30 @@ class _AuthorizationSheet extends StatefulWidget {
   State<_AuthorizationSheet> createState() => _AuthorizationSheetState();
 }
 
-class _AuthorizationSheetState extends State<_AuthorizationSheet> {
+class _AuthorizationSheetState extends State<_AuthorizationSheet>
+    with WidgetsBindingObserver {
   final TextEditingController _callbackController = TextEditingController();
   bool _busy = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _callbackController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_readClipboardCallback());
+    }
   }
 
   Future<void> _copyUrl() async {
@@ -748,6 +766,48 @@ class _AuthorizationSheetState extends State<_AuthorizationSheet> {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('授权链接已复制')));
     }
+  }
+
+  Future<void> _openWeChat() async {
+    await Clipboard.setData(ClipboardData(text: widget.initialUrl));
+    try {
+      final opened = await launchUrl(
+        Uri.parse('weixin://'),
+        mode: LaunchMode.externalApplication,
+      );
+      if (opened) {
+        if (mounted) {
+          setState(() {
+            _error = '微信已打开。请把刚复制的授权链接发送到文件传输助手并点开。';
+          });
+        }
+        return;
+      }
+    } catch (_) {
+      // Keep the clipboard fallback below.
+    }
+    if (mounted) {
+      setState(() {
+        _error = '无法直接打开微信，授权链接已复制，请手动发送到微信中打开。';
+      });
+    }
+  }
+
+  Future<void> _readClipboardCallback({bool showError = false}) async {
+    if (_busy) {
+      return;
+    }
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (!text.startsWith('https://tcsisu.educationgroup.cn/') ||
+        !text.contains('code=')) {
+      if (showError && mounted) {
+        setState(() => _error = '剪贴板中没有检测到微信授权回调链接');
+      }
+      return;
+    }
+    _callbackController.text = text;
+    await _complete();
   }
 
   Future<void> _complete() async {
@@ -806,12 +866,41 @@ class _AuthorizationSheetState extends State<_AuthorizationSheet> {
             ),
             const SizedBox(height: 7),
             Text(
-              '授权链接已复制。请发送到微信“文件传输助手”并点开；'
-              '出现 404 页面后，点击“…→在浏览器中打开”，再复制网址粘贴到下方。',
+              '首次使用需要完成一次微信授权。授权成功后，'
+              'App 会在本机保存绑定参数并自动恢复水电登录，之后无需反复授权。'
+              '返回 App 时也会自动识别剪贴板回调。',
               style: TextStyle(
                 color: context.appMuted,
                 fontSize: 12,
                 height: 1.55,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _busy ? null : _openWeChat,
+                    icon: const Icon(Icons.chat_bubble_outline_rounded),
+                    label: const Text('打开微信授权'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: _copyUrl,
+                  icon: const Icon(Icons.copy_all_outlined, size: 18),
+                  label: const Text('复制链接'),
+                ),
+              ],
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () => _readClipboardCallback(showError: true),
+                icon: const Icon(Icons.content_paste_search_outlined, size: 18),
+                label: const Text('粘贴并验证回调'),
               ),
             ),
             const SizedBox(height: 14),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -185,6 +186,19 @@ class _TaskCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: context.appMuted, fontSize: 12),
+                ),
+              ],
+              if (task.imagePath != null &&
+                  File(task.imagePath!).existsSync()) ...[
+                const SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(
+                    File(task.imagePath!),
+                    width: double.infinity,
+                    height: 140,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ],
               const SizedBox(height: 12),

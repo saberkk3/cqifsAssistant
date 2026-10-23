@@ -15,6 +15,9 @@ class AppSettings {
     required this.themeColor,
     required this.timetableBackgroundValue,
     required this.timetableBackgroundImagePath,
+    required this.utilityAlertsEnabled,
+    required this.waterAlertThreshold,
+    required this.electricityAlertThreshold,
   });
 
   static const usernameKey = 'username';
@@ -35,6 +38,11 @@ class AppSettings {
   static const tasksKey = 'schedule_tasks_v1';
   static const hiddenCoursesKey = 'hidden_courses_v1';
   static const utilitySnapshotKey = 'utility_snapshot_v2';
+  static const utilityHistoryKey = 'utility_history_v1';
+  static const utilityAlertsEnabledKey = 'utility_alerts_enabled';
+  static const waterAlertThresholdKey = 'water_alert_threshold';
+  static const electricityAlertThresholdKey = 'electricity_alert_threshold';
+  static const utilityAlertLastDayKey = 'utility_alert_last_day';
 
   final int refreshIntervalMinutes;
   final bool remindersEnabled;
@@ -45,6 +53,9 @@ class AppSettings {
   final AppThemeColor themeColor;
   final int timetableBackgroundValue;
   final String? timetableBackgroundImagePath;
+  final bool utilityAlertsEnabled;
+  final double waterAlertThreshold;
+  final double electricityAlertThreshold;
 
   static const defaults = AppSettings(
     refreshIntervalMinutes: 60,
@@ -56,6 +67,9 @@ class AppSettings {
     themeColor: AppThemeColor.white,
     timetableBackgroundValue: 0xFFFFFFFF,
     timetableBackgroundImagePath: null,
+    utilityAlertsEnabled: false,
+    waterAlertThreshold: 10,
+    electricityAlertThreshold: 20,
   );
 
   factory AppSettings.load(SharedPreferences prefs) {
@@ -87,6 +101,15 @@ class AppSettings {
       timetableBackgroundImagePath: prefs.getString(
         timetableBackgroundImageKey,
       ),
+      utilityAlertsEnabled:
+          prefs.getBool(utilityAlertsEnabledKey) ??
+          defaults.utilityAlertsEnabled,
+      waterAlertThreshold:
+          prefs.getDouble(waterAlertThresholdKey) ??
+          defaults.waterAlertThreshold,
+      electricityAlertThreshold:
+          prefs.getDouble(electricityAlertThresholdKey) ??
+          defaults.electricityAlertThreshold,
     );
   }
 
@@ -101,6 +124,9 @@ class AppSettings {
     int? timetableBackgroundValue,
     String? timetableBackgroundImagePath,
     bool clearTimetableBackgroundImage = false,
+    bool? utilityAlertsEnabled,
+    double? waterAlertThreshold,
+    double? electricityAlertThreshold,
   }) {
     return AppSettings(
       refreshIntervalMinutes:
@@ -116,6 +142,10 @@ class AppSettings {
       timetableBackgroundImagePath: clearTimetableBackgroundImage
           ? null
           : timetableBackgroundImagePath ?? this.timetableBackgroundImagePath,
+      utilityAlertsEnabled: utilityAlertsEnabled ?? this.utilityAlertsEnabled,
+      waterAlertThreshold: waterAlertThreshold ?? this.waterAlertThreshold,
+      electricityAlertThreshold:
+          electricityAlertThreshold ?? this.electricityAlertThreshold,
     );
   }
 
@@ -134,5 +164,11 @@ class AppSettings {
     } else {
       await prefs.setString(timetableBackgroundImageKey, backgroundImagePath);
     }
+    await prefs.setBool(utilityAlertsEnabledKey, utilityAlertsEnabled);
+    await prefs.setDouble(waterAlertThresholdKey, waterAlertThreshold);
+    await prefs.setDouble(
+      electricityAlertThresholdKey,
+      electricityAlertThreshold,
+    );
   }
 }

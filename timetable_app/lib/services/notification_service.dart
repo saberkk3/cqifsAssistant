@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
@@ -53,6 +55,27 @@ class NotificationService {
     await _plugin.cancelAll();
   }
 
+  Future<void> showUtilityBalanceAlert(String details) async {
+    await init();
+    await _plugin.show(
+      id: 990002,
+      title: '水电余额偏低',
+      body: details,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'utility_balance',
+          '水电余额预警',
+          channelDescription: '水费或电费余额低于设定值时提醒',
+          importance: Importance.high,
+          priority: Priority.high,
+          category: AndroidNotificationCategory.reminder,
+          playSound: true,
+          enableVibration: true,
+        ),
+      ),
+    );
+  }
+
   Future<void> scheduleCacheReminder({
     required DateTime? lastUpdated,
     required bool enabled,
@@ -102,21 +125,37 @@ class NotificationService {
       if (notifyAt.isBefore(now)) {
         continue;
       }
+      final imagePath = task.imagePath;
+      final hasImage =
+          imagePath != null &&
+          imagePath.isNotEmpty &&
+          File(imagePath).existsSync();
+      final details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'task_reminder',
+          '作业与日程提醒',
+          channelDescription: '自定义日程开始前提醒',
+          importance: Importance.high,
+          priority: Priority.high,
+          category: AndroidNotificationCategory.reminder,
+          largeIcon: hasImage ? FilePathAndroidBitmap(imagePath) : null,
+          styleInformation: hasImage
+              ? BigPictureStyleInformation(
+                  FilePathAndroidBitmap(imagePath),
+                  largeIcon: FilePathAndroidBitmap(imagePath),
+                  contentTitle: task.title,
+                  summaryText: task.note,
+                  showBigPictureWhenCollapsed: true,
+                )
+              : null,
+        ),
+      );
       await _plugin.zonedSchedule(
         id: id,
         title: '日程提醒 · ${task.title}',
         body: task.note.isEmpty ? '日程即将开始' : task.note,
         scheduledDate: _localScheduleDate(notifyAt),
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'task_reminder',
-            '作业与日程提醒',
-            channelDescription: '自定义日程开始前提醒',
-            importance: Importance.high,
-            priority: Priority.high,
-            category: AndroidNotificationCategory.reminder,
-          ),
-        ),
+        notificationDetails: details,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         payload: task.id,
       );

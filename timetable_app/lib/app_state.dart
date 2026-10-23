@@ -38,6 +38,7 @@ class AppState extends ChangeNotifier {
   Set<String> _hiddenCourseIds = {};
   List<ScheduleTask> _tasks = const [];
   UtilitySnapshot? _utilitySnapshot;
+  List<UtilityHistoryPoint> _utilityHistory = const [];
   DateTime? _lastUpdated;
   AppSettings _settings = AppSettings.defaults;
 
@@ -89,6 +90,8 @@ class AppState extends ChangeNotifier {
   DateTime? get lastUpdated => _lastUpdated;
   AppSettings get settings => _settings;
   UtilitySnapshot? get utilitySnapshot => _utilitySnapshot;
+  List<UtilityHistoryPoint> get utilityHistory =>
+      List.unmodifiable(_utilityHistory);
   int get currentWeek => displayedCurrentWeek(_term);
   Color get themePrimary => _settings.themeColor.primary;
   Color get timetableBackground => Color(_settings.timetableBackgroundValue);
@@ -132,6 +135,7 @@ class AppState extends ChangeNotifier {
       await _loadHiddenCourses();
       await _loadTasks();
       await _loadUtilitySnapshot();
+      await _loadUtilityHistory();
       final cached = await repository.loadCachedSnapshot();
       if (cached != null) {
         _applySnapshot(cached);
@@ -294,6 +298,40 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<String?> setUtilityAlertsEnabled(bool enabled) async {
+    if (enabled) {
+      final granted = await notifications.requestPermissions(
+        ReminderMode.notification,
+      );
+      if (!granted) {
+        return '未获得通知权限';
+      }
+    }
+    _settings = _settings.copyWith(utilityAlertsEnabled: enabled);
+    final prefs = await _preferences;
+    await _settings.save(prefs);
+    notifyListeners();
+    return null;
+  }
+
+  Future<void> setWaterAlertThreshold(double value) async {
+    _settings = _settings.copyWith(
+      waterAlertThreshold: value.clamp(0, 10000).toDouble(),
+    );
+    final prefs = await _preferences;
+    await _settings.save(prefs);
+    notifyListeners();
+  }
+
+  Future<void> setElectricityAlertThreshold(double value) async {
+    _settings = _settings.copyWith(
+      electricityAlertThreshold: value.clamp(0, 10000).toDouble(),
+    );
+    final prefs = await _preferences;
+    await _settings.save(prefs);
+    notifyListeners();
+  }
+
   Future<void> requireLogin() async {
     _loggedIn = false;
     notifyListeners();
@@ -313,6 +351,7 @@ class AppState extends ChangeNotifier {
     _hiddenCourseIds = {};
     _tasks = const [];
     _utilitySnapshot = null;
+    _utilityHistory = const [];
     _lastUpdated = null;
     _error = null;
     final prefs = await _preferences;
@@ -320,16 +359,39 @@ class AppState extends ChangeNotifier {
     await prefs.remove(AppSettings.hiddenCoursesKey);
     await prefs.remove(AppSettings.tasksKey);
     await prefs.remove(AppSettings.utilitySnapshotKey);
+    await prefs.remove(AppSettings.utilityHistoryKey);
+    await prefs.remove(AppSettings.utilityAlertLastDayKey);
     notifyListeners();
   }
 
   Future<void> saveUtilitySnapshot(UtilitySnapshot snapshot) async {
     _utilitySnapshot = snapshot;
+    final point = UtilityHistoryPoint(
+      waterRemaining: snapshot.waterRemaining,
+      electricityRemaining: snapshot.electricityRemaining,
+      waterBalance: snapshot.waterBalance,
+      electricityBalance: snapshot.electricityBalance,
+      recordedAt: snapshot.updatedAt,
+    );
+    final last = _utilityHistory.isEmpty ? null : _utilityHistory.last;
+    if (last == null ||
+        point.recordedAt.difference(last.recordedAt) >=
+            const Duration(minutes: 10)) {
+      _utilityHistory = [..._utilityHistory, point];
+      if (_utilityHistory.length > 180) {
+        _utilityHistory = _utilityHistory.sublist(_utilityHistory.length - 180);
+      }
+    }
     final prefs = await _preferences;
     await prefs.setString(
       AppSettings.utilitySnapshotKey,
       jsonEncode(snapshot.toJson()),
     );
+    await prefs.setString(
+      AppSettings.utilityHistoryKey,
+      jsonEncode(_utilityHistory.map((item) => item.toJson()).toList()),
+    );
+    await _checkUtilityAlerts(snapshot);
     notifyListeners();
   }
 
@@ -596,6 +658,60 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       _utilitySnapshot = null;
     }
+  }
+
+  Future<void> _loadUtilityHistory() async {
+    final prefs = await _preferences;
+    final raw = prefs.getString(AppSettings.utilityHistoryKey);
+    if (raw == null || raw.isEmpty) {
+      return;
+    }
+    try {
+      final values = jsonDecode(raw) as List<dynamic>;
+      _utilityHistory = values
+          .whereType<Map>()
+          .map(
+            (item) => UtilityHistoryPoint.fromJson(
+              item.map((key, value) => MapEntry(key.toString(), value)),
+            ),
+          )
+          .toList();
+    } catch (_) {
+      _utilityHistory = const [];
+    }
+  }
+
+  Future<void> _checkUtilityAlerts(UtilitySnapshot snapshot) async {
+    if (!_settings.utilityAlertsEnabled) {
+      return;
+    }
+    final lowWater = snapshot.waterBalance <= _settings.waterAlertThreshold;
+    final lowElectricity =
+        snapshot.electricityBalance <= _settings.electricityAlertThreshold;
+    if (!lowWater && !lowElectricity) {
+      return;
+    }
+    final prefs = await _preferences;
+    final today =
+        '${DateTime.now().year}-${DateTime.now().month}-${DateTime.now().day}';
+    if (prefs.getString(AppSettings.utilityAlertLastDayKey) == today) {
+      return;
+    }
+    final lines = <String>[];
+    if (lowWater) {
+      lines.add(
+        '水费余额 ¥${snapshot.waterBalance.toStringAsFixed(2)}'
+        '（阈值 ¥${_settings.waterAlertThreshold.toStringAsFixed(2)}）',
+      );
+    }
+    if (lowElectricity) {
+      lines.add(
+        '电费余额 ¥${snapshot.electricityBalance.toStringAsFixed(2)}'
+        '（阈值 ¥${_settings.electricityAlertThreshold.toStringAsFixed(2)}）',
+      );
+    }
+    await notifications.showUtilityBalanceAlert(lines.join('\n'));
+    await prefs.setString(AppSettings.utilityAlertLastDayKey, today);
   }
 
   Future<void> _persistTasks() async {

@@ -3,10 +3,12 @@ import 'dart:typed_data';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/course.dart';
+import '../models/empty_classroom.dart';
 import 'schedule_parser.dart';
 
 class LoginException implements Exception {
@@ -200,6 +202,62 @@ class JwClient {
     );
   }
 
+  Future<EmptyClassroomResult> fetchEmptyClassrooms({
+    required int week,
+    required int weekday,
+    String? term,
+    String campus = '',
+  }) async {
+    await init();
+    final formResponse = await _client.get<String>(
+      '$eduRoot/kbxx/jsjy_query',
+      options: Options(
+        responseType: ResponseType.plain,
+        headers: {'Referer': '$baseUrl$eduRoot/framework/xsMain.jsp'},
+      ),
+    );
+    final formHtml = formResponse.data ?? '';
+    _ensureLoggedInPage(formHtml);
+    final formDocument = html_parser.parse(formHtml);
+    final timeMode = _selectedOptionValue(formDocument, 'kbjcmsid');
+    if (timeMode == null || timeMode.isEmpty) {
+      throw const FormatException('空教室页面缺少节次模式，学校系统可能已更新');
+    }
+    final defaultTerm = _inputValue(formDocument, 'xnxqh');
+    final wantedTerm = term?.isNotEmpty == true ? term! : defaultTerm;
+    if (wantedTerm == null || wantedTerm.isEmpty) {
+      throw const FormatException('无法确定空教室查询学期');
+    }
+    final campuses = _campusOptions(formDocument);
+    final queryResponse = await _client.post<String>(
+      '$eduRoot/kbxx/jsjy_query2',
+      data: {
+        'xnxqh': wantedTerm,
+        'typewhere': 'jszq',
+        'kbjcmsid': timeMode,
+        'xqbh': campus,
+        'zc': '$week',
+        'zc2': '$week',
+        'xq': '$weekday',
+        'xq2': '$weekday',
+      },
+      options: Options(
+        responseType: ResponseType.plain,
+        contentType: Headers.formUrlEncodedContentType,
+        headers: {'Referer': '$baseUrl$eduRoot/kbxx/jsjy_query'},
+      ),
+    );
+    final queryHtml = queryResponse.data ?? '';
+    _ensureLoggedInPage(queryHtml);
+    final parsed = _parseEmptyRoomGrid(queryHtml);
+    return EmptyClassroomResult(
+      term: wantedTerm,
+      campuses: campuses,
+      periods: parsed.$1,
+      rooms: parsed.$2,
+    );
+  }
+
   Future<void> clearSession() async {
     await init();
     await _jar.deleteAll();
@@ -254,5 +312,120 @@ class JwClient {
       scode = scode.substring(prefixLength);
     }
     return buffer.toString();
+  }
+
+  void _ensureLoggedInPage(String html) {
+    if (html.contains('用户没有登录') ||
+        html.contains('重新登录') ||
+        html.contains('id="userPassword"') ||
+        html.contains('正在转入统一认证') ||
+        html.contains('"flag1":2')) {
+      throw const SessionExpiredException();
+    }
+  }
+
+  String? _inputValue(dom.Document document, String name) {
+    final input = document.querySelector('input[name="$name"]');
+    return input == null ? null : _attribute(input, 'value');
+  }
+
+  String? _selectedOptionValue(dom.Document document, String name) {
+    final select = document.querySelector('select[name="$name"]');
+    if (select == null) {
+      return null;
+    }
+    final option =
+        select.querySelector('option[selected]') ??
+        select.querySelector('option');
+    return option == null ? null : _attribute(option, 'value');
+  }
+
+  List<EmptyRoomCampus> _campusOptions(dom.Document document) {
+    final select = document.querySelector('select[name="xqbh"]');
+    if (select == null) {
+      return const [];
+    }
+    return select
+        .querySelectorAll('option')
+        .map(
+          (option) => EmptyRoomCampus(
+            value: _attribute(option, 'value') ?? '',
+            label: option.text.trim(),
+          ),
+        )
+        .where((campus) => campus.value.isNotEmpty)
+        .toList();
+  }
+
+  (List<EmptyRoomPeriod>, List<EmptyClassroom>) _parseEmptyRoomGrid(
+    String html,
+  ) {
+    final document = html_parser.parse(html);
+    final table = document.querySelector('#dataList');
+    if (table == null) {
+      throw const FormatException('空教室结果缺少 dataList 表格');
+    }
+    final periods = <EmptyRoomPeriod>[];
+    for (final cell in table.querySelectorAll('th[tdvalue]')) {
+      final code = _attribute(cell, 'tdvalue') ?? '';
+      if (code.isEmpty) {
+        continue;
+      }
+      periods.add(
+        EmptyRoomPeriod(
+          code: code,
+          startTime: _attribute(cell, 'tdKssj'),
+          endTime: _attribute(cell, 'tdJssj'),
+        ),
+      );
+    }
+    final rooms = <EmptyClassroom>[];
+    for (final row in table.querySelectorAll('tr')) {
+      final cells = row.children.where((element) => element.localName == 'td');
+      if (cells.length < 2) {
+        continue;
+      }
+      final cellList = cells.toList();
+      final label = cellList.first.text
+          .replaceAll('\u00a0', ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (label.isEmpty) {
+        continue;
+      }
+      final match = RegExp(
+        r'^(.*?)\s*[(（]\s*(\d{1,5})(?:\s*/\s*\d{1,5})?\s*[)）]\s*$',
+      ).firstMatch(label);
+      final roomName = match?.group(1)?.trim() ?? label;
+      final capacity = int.tryParse(match?.group(2) ?? '');
+      final freeFlags = cellList
+          .skip(1)
+          .map((cell) => cell.text.replaceAll('\u00a0', ' ').trim().isEmpty)
+          .toList();
+      if (freeFlags.length != periods.length) {
+        continue;
+      }
+      final freeCodes = <String>[
+        for (var index = 0; index < periods.length; index++)
+          if (freeFlags[index]) periods[index].code,
+      ];
+      rooms.add(
+        EmptyClassroom(
+          name: roomName,
+          capacity: capacity,
+          freePeriodCodes: freeCodes,
+        ),
+      );
+    }
+    return (periods, rooms);
+  }
+
+  String? _attribute(dom.Element element, String name) {
+    for (final entry in element.attributes.entries) {
+      if (entry.key.toString().toLowerCase() == name.toLowerCase()) {
+        return entry.value;
+      }
+    }
+    return null;
   }
 }

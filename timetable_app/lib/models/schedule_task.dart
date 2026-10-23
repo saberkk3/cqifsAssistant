@@ -7,6 +7,7 @@ class ScheduleTask {
     required this.endAt,
     required this.reminderMinutes,
     required this.createdAt,
+    this.imagePath,
   });
 
   final String id;
@@ -16,6 +17,7 @@ class ScheduleTask {
   final DateTime endAt;
   final int reminderMinutes;
   final DateTime createdAt;
+  final String? imagePath;
 
   bool get hasReminder => reminderMinutes >= 0;
 
@@ -51,6 +53,7 @@ class ScheduleTask {
       'endAt': endAt.toIso8601String(),
       'reminderMinutes': reminderMinutes,
       'createdAt': createdAt.toIso8601String(),
+      'imagePath': imagePath,
     };
   }
 
@@ -67,6 +70,7 @@ class ScheduleTask {
       createdAt:
           DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
+      imagePath: json['imagePath'] as String?,
     );
   }
 }

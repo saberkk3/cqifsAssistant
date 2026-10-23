@@ -349,6 +349,74 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           _SectionCard(
+            title: '水电余额预警',
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('启用低余额提醒'),
+                subtitle: const Text('刷新水电数据后发现余额偏低时通知'),
+                value: state.settings.utilityAlertsEnabled,
+                activeThumbColor: AppColors.primary,
+                onChanged: (value) async {
+                  final error = await state.setUtilityAlertsEnabled(value);
+                  if (context.mounted && error != null) {
+                    _showMessage(context, error);
+                  }
+                },
+              ),
+              const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('水费提醒阈值'),
+                subtitle: const Text('账户余额低于该金额时提醒'),
+                trailing: DropdownButton<double>(
+                  value: state.settings.waterAlertThreshold,
+                  underline: const SizedBox.shrink(),
+                  items: const [5.0, 10.0, 20.0, 30.0, 50.0, 100.0]
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text('¥${value.toStringAsFixed(0)}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: state.settings.utilityAlertsEnabled
+                      ? (value) {
+                          if (value != null) {
+                            state.setWaterAlertThreshold(value);
+                          }
+                        }
+                      : null,
+                ),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('电费提醒阈值'),
+                subtitle: const Text('账户余额低于该金额时提醒'),
+                trailing: DropdownButton<double>(
+                  value: state.settings.electricityAlertThreshold,
+                  underline: const SizedBox.shrink(),
+                  items: const [10.0, 20.0, 30.0, 50.0, 100.0, 200.0]
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text('¥${value.toStringAsFixed(0)}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: state.settings.utilityAlertsEnabled
+                      ? (value) {
+                          if (value != null) {
+                            state.setElectricityAlertThreshold(value);
+                          }
+                        }
+                      : null,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _SectionCard(
             title: '数据',
             children: [
               ListTile(
@@ -398,7 +466,7 @@ class SettingsScreen extends StatelessWidget {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 title: const Text('重外小助手'),
-                subtitle: const Text('版本 2.2.7 · Android + Flutter'),
+                subtitle: const Text('版本 2.5.2 · Android + Flutter'),
               ),
               const Divider(),
               ListTile(

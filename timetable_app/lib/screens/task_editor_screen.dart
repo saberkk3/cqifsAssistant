@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
@@ -21,6 +25,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
   late DateTime _startAt;
   late DateTime _endAt;
   late int _reminderMinutes;
+  String? _imagePath;
   bool _saving = false;
 
   bool get _isEditing => widget.initial != null;
@@ -35,6 +40,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
     _startAt = initial?.startAt ?? now.add(const Duration(hours: 1));
     _endAt = initial?.endAt ?? _startAt.add(const Duration(hours: 1));
     _reminderMinutes = initial?.reminderMinutes ?? 30;
+    _imagePath = initial?.imagePath;
   }
 
   @override
@@ -101,6 +107,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
       endAt: _endAt,
       reminderMinutes: _reminderMinutes,
       createdAt: widget.initial?.createdAt ?? DateTime.now(),
+      imagePath: _imagePath,
     );
     await context.read<AppState>().saveTask(task);
     if (mounted) {
@@ -135,6 +142,24 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
       if (mounted) {
         Navigator.pop(context);
       }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1800,
+      imageQuality: 85,
+    );
+    if (image == null || !mounted) {
+      return;
+    }
+    final directory = await getApplicationDocumentsDirectory();
+    final target =
+        '${directory.path}/task_${DateTime.now().microsecondsSinceEpoch}.jpg';
+    await image.saveTo(target);
+    if (mounted) {
+      setState(() => _imagePath = target);
     }
   }
 
@@ -189,6 +214,38 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
                       prefixIcon: Icon(Icons.notes_outlined),
                       alignLabelWithHint: true,
                     ),
+                  ),
+                  const SizedBox(height: 14),
+                  if (_imagePath != null && File(_imagePath!).existsSync()) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Image.file(
+                        File(_imagePath!),
+                        width: double.infinity,
+                        height: 170,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickImage,
+                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                          label: Text(_imagePath == null ? '添加提醒图片' : '更换提醒图片'),
+                        ),
+                      ),
+                      if (_imagePath != null) ...[
+                        const SizedBox(width: 10),
+                        IconButton(
+                          tooltip: '移除图片',
+                          onPressed: () => setState(() => _imagePath = null),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),

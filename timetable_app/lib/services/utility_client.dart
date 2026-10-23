@@ -4,6 +4,7 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UtilityAuthRequiredException implements Exception {
   const UtilityAuthRequiredException([this.message = '水电登录已过期，请重新授权']);
@@ -60,6 +61,42 @@ class UtilityPaymentRecord {
     'quantity': quantity,
     'payTime': payTime,
     'orderId': orderId,
+  };
+}
+
+class UtilityHistoryPoint {
+  const UtilityHistoryPoint({
+    required this.waterRemaining,
+    required this.electricityRemaining,
+    required this.waterBalance,
+    required this.electricityBalance,
+    required this.recordedAt,
+  });
+
+  final double waterRemaining;
+  final double electricityRemaining;
+  final double waterBalance;
+  final double electricityBalance;
+  final DateTime recordedAt;
+
+  factory UtilityHistoryPoint.fromJson(Map<String, dynamic> json) {
+    return UtilityHistoryPoint(
+      waterRemaining: _asDouble(json['waterRemaining']),
+      electricityRemaining: _asDouble(json['electricityRemaining']),
+      waterBalance: _asDouble(json['waterBalance']),
+      electricityBalance: _asDouble(json['electricityBalance']),
+      recordedAt:
+          DateTime.tryParse((json['recordedAt'] ?? '').toString()) ??
+          DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'waterRemaining': waterRemaining,
+    'electricityRemaining': electricityRemaining,
+    'waterBalance': waterBalance,
+    'electricityBalance': electricityBalance,
+    'recordedAt': recordedAt.toIso8601String(),
   };
 }
 
@@ -169,6 +206,8 @@ class UtilityClient {
   static const _openIdRedirect =
       'http://cg.cqifs.edu.cn/sdms-pay-weixin/service/weixin/getOpenId';
   static const _callbackUrl = 'https://tcsisu.educationgroup.cn/robots.txt';
+  static const _openIdKey = 'utility_openid_v1';
+  static const _bindingTokenKey = 'utility_binding_token_v1';
 
   PersistCookieJar? _cookieJar;
   Dio? _dio;
@@ -213,6 +252,17 @@ class UtilityClient {
 
   Future<UtilitySnapshot> fetchSnapshot() async {
     await init();
+    try {
+      return await _fetchSnapshotOnce();
+    } on UtilityAuthRequiredException {
+      if (await _restoreBoundSession()) {
+        return _fetchSnapshotOnce();
+      }
+      rethrow;
+    }
+  }
+
+  Future<UtilitySnapshot> _fetchSnapshotOnce() async {
     final user = await _fetchResult('service/find/userinfo');
     final water = await _fetchResult(
       'service/waterBalance?type=3&systemType=1',
@@ -388,6 +438,7 @@ class UtilityClient {
       entryUrl: exchangeUrl.toString(),
       location: callbackLocation,
     );
+    await _saveBinding(loginUrl);
     final login = await _client.get<String>(
       loginUrl,
       options: Options(
@@ -402,6 +453,67 @@ class UtilityClient {
     }
     _pendingState = null;
     return fetchSnapshot();
+  }
+
+  Future<void> _saveBinding(String loginUrl) async {
+    final callback = Uri.tryParse(loginUrl);
+    final openId = callback?.queryParameters['openid'];
+    final bindingToken = callback?.queryParameters['bt'];
+    if (openId == null ||
+        openId.isEmpty ||
+        bindingToken == null ||
+        bindingToken.isEmpty) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_openIdKey, openId);
+    await prefs.setString(_bindingTokenKey, bindingToken);
+  }
+
+  Future<bool> _restoreBoundSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final openId = prefs.getString(_openIdKey);
+    final bindingToken = prefs.getString(_bindingTokenKey);
+    if (openId == null ||
+        openId.isEmpty ||
+        bindingToken == null ||
+        bindingToken.isEmpty) {
+      return false;
+    }
+
+    final entry = await _client.get<String>(
+      _entryUrl,
+      options: Options(
+        followRedirects: false,
+        responseType: ResponseType.plain,
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+    if (entry.statusCode != 301 && entry.statusCode != 302) {
+      return false;
+    }
+
+    final loginUri = Uri(
+      scheme: 'http',
+      host: 'cg.cqifs.edu.cn',
+      path: '/sdms-pay-weixin/service/weixin/getOpenId',
+      queryParameters: {
+        'openid': openId,
+        'bt': bindingToken,
+        'token': DateTime.now().millisecondsSinceEpoch.toString(),
+      },
+    );
+    final response = await _client.get<String>(
+      loginUri.toString(),
+      options: Options(
+        followRedirects: true,
+        maxRedirects: 10,
+        responseType: ResponseType.plain,
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+    return (response.statusCode ?? 0) >= 200 &&
+        (response.statusCode ?? 0) < 400;
   }
 
   Future<Map<String, dynamic>> _fetchResult(String path) async {

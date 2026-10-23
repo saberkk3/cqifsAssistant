@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../app_palette.dart';
+import '../app_state.dart';
 import '../app_theme.dart';
 import '../services/utility_client.dart';
+import '../widgets/utility_usage_sparkline.dart';
 
 class UtilityMeterScreen extends StatefulWidget {
   const UtilityMeterScreen({
@@ -221,6 +224,11 @@ class _UtilityMeterScreenState extends State<UtilityMeterScreen> {
                   value: '¥${price.toStringAsFixed(2)}/${widget.type.unit}',
                 ),
               ],
+            ),
+            const SizedBox(height: 18),
+            _UsageTrendCard(
+              type: widget.type,
+              points: context.watch<AppState>().utilityHistory,
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
@@ -811,6 +819,120 @@ class _NoticeCard extends StatelessWidget {
                 height: 1.5,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UsageTrendCard extends StatelessWidget {
+  const _UsageTrendCard({required this.type, required this.points});
+
+  final UtilityMeterType type;
+  final List<UtilityHistoryPoint> points;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = points.length > 30
+        ? points.sublist(points.length - 30)
+        : points;
+    if (visible.length < 2) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: context.appCard,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: context.appBorder),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.show_chart_rounded, color: context.appMuted),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '刷新两次以上水电数据后，这里会显示用量趋势。',
+                style: TextStyle(
+                  color: context.appMuted,
+                  fontSize: 12,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final values = visible
+        .map(
+          (point) => type == UtilityMeterType.electricity
+              ? point.electricityRemaining
+              : point.waterRemaining,
+        )
+        .toList();
+    final first = visible.first;
+    final last = visible.last;
+    final firstValue = type == UtilityMeterType.electricity
+        ? first.electricityRemaining
+        : first.waterRemaining;
+    final lastValue = type == UtilityMeterType.electricity
+        ? last.electricityRemaining
+        : last.waterRemaining;
+    final hours = last.recordedAt.difference(first.recordedAt).inMinutes / 60;
+    final dailyUsage = hours > 0 && firstValue > lastValue
+        ? (firstValue - lastValue) / (hours / 24)
+        : 0.0;
+    final daysLeft = dailyUsage > 0 ? lastValue / dailyUsage : null;
+    final accent = type == UtilityMeterType.electricity
+        ? const Color(0xFFE69B16)
+        : const Color(0xFF1687D9);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.appCard,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: context.appBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.show_chart_rounded, color: accent, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                '${type.title}用量趋势',
+                style: TextStyle(
+                  color: context.appText,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              if (daysLeft != null)
+                Text(
+                  '预计可用 ${daysLeft.toStringAsFixed(1)} 天',
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          UtilityUsageSparkline(
+            values: values,
+            color: accent,
+            gridColor: context.appBorder,
+            height: 112,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            dailyUsage > 0
+                ? '日均消耗约 ${dailyUsage.toStringAsFixed(2)} ${type.unit}'
+                : '当前历史数据中还没有检测到持续消耗',
+            style: TextStyle(color: context.appMuted, fontSize: 10),
           ),
         ],
       ),
