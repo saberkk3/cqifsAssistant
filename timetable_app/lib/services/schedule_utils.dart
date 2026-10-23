@@ -2,6 +2,22 @@ import '../models/course.dart';
 
 const weekdayNames = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
 
+const periodSchedule = [
+  (8, 0, 8, 45),
+  (8, 55, 9, 40),
+  (10, 10, 10, 55),
+  (11, 5, 11, 50),
+  (14, 0, 14, 45),
+  (14, 55, 15, 40),
+  (16, 0, 16, 45),
+  (16, 55, 17, 40),
+  (19, 0, 19, 45),
+  (19, 55, 20, 40),
+  (20, 50, 21, 35),
+  (21, 45, 22, 30),
+  (22, 40, 23, 25),
+];
+
 String weekdayShortLabel(int weekday) {
   const labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
   if (weekday < 1 || weekday > 7) {
@@ -76,35 +92,48 @@ List<Course> coursesForDay(
 }
 
 DateTime? courseStartTime(DateTime date, Course course) {
-  final displayTimeMatch = RegExp(r'(\d{1,2}):(\d{2})')
-      .firstMatch(course.displayTime);
-  if (displayTimeMatch != null) {
-    final hour = int.tryParse(displayTimeMatch.group(1) ?? '');
-    final minute = int.tryParse(displayTimeMatch.group(2) ?? '');
-    if (hour != null && minute != null) {
-      return DateTime(date.year, date.month, date.day, hour, minute);
-    }
+  final displayStart = _timeFromText(course.displayTime);
+  final textStart = _timeFromText(course.timeText);
+  final parsedStart = displayStart ?? textStart;
+  if (parsedStart != null) {
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      parsedStart.$1,
+      parsedStart.$2,
+    );
   }
-  final basePeriod = course.startPeriod.isEven
-      ? course.startPeriod - 1
-      : course.startPeriod;
-  final hourMinute = switch (basePeriod) {
-    1 => const (8, 30),
-    3 => const (10, 25),
-    5 => const (12, 45),
-    7 => const (14, 30),
-    9 => const (16, 25),
-    11 => const (19, 0),
-    13 => const (20, 40),
-    _ => const (8, 30),
-  };
-  return DateTime(
-    date.year,
-    date.month,
-    date.day,
-    hourMinute.$1,
-    hourMinute.$2,
-  );
+  final periodIndex = (course.startPeriod - 1)
+      .clamp(0, periodSchedule.length - 1)
+      .toInt();
+  final period = periodSchedule[periodIndex];
+  return DateTime(date.year, date.month, date.day, period.$1, period.$2);
+}
+
+(int, int)? _timeFromText(String text) {
+  for (final match in RegExp(r'(\d{1,2}):(\d{2})').allMatches(text)) {
+    final hour = int.tryParse(match.group(1) ?? '');
+    final minute = int.tryParse(match.group(2) ?? '');
+    if (hour == null || minute == null || hour > 23 || minute > 59) {
+      continue;
+    }
+    return (hour, minute);
+  }
+  return null;
+}
+
+String periodTimeRange(int period) {
+  if (period < 1 || period > periodSchedule.length) {
+    return '';
+  }
+  final value = periodSchedule[period - 1];
+  String format(int hour, int minute) {
+    return '${hour.toString().padLeft(2, '0')}:'
+        '${minute.toString().padLeft(2, '0')}';
+  }
+
+  return '${format(value.$1, value.$2)}-${format(value.$3, value.$4)}';
 }
 
 String clockTimeLabel(Course course) {

@@ -383,25 +383,7 @@ class _WeekScreenState extends State<WeekScreen> {
     final today = dateOnly(DateTime.now());
 
     String periodTime(int period) {
-      const times = [
-        '08:30-09:15',
-        '09:20-10:05',
-        '10:25-11:10',
-        '11:15-12:00',
-        '12:45-13:30',
-        '13:35-14:20',
-        '14:30-15:15',
-        '15:20-16:05',
-        '16:25-17:10',
-        '17:15-18:00',
-        '19:00-19:45',
-        '19:50-20:35',
-        '20:40-21:25',
-      ];
-      if (period < 1 || period > times.length) {
-        return '';
-      }
-      return times[period - 1];
+      return periodTimeRange(period);
     }
 
     bool isTodayColumn(int weekday) {

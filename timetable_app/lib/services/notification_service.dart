@@ -41,9 +41,8 @@ class NotificationService {
         >();
     final notificationGranted =
         await android?.requestNotificationsPermission() ?? true;
-    var exactGranted = true;
+    final exactGranted = await android?.requestExactAlarmsPermission() ?? true;
     if (mode == ReminderMode.alarm) {
-      exactGranted = await android?.requestExactAlarmsPermission() ?? true;
       await android?.requestFullScreenIntentPermission();
     }
     return notificationGranted && exactGranted;
@@ -73,7 +72,7 @@ class NotificationService {
       id: _cacheReminderId,
       title: '课表缓存需要更新',
       body: '本地课表已缓存 $days 天，建议打开 App 重新登录刷新。',
-      scheduledDate: tz.TZDateTime.from(scheduledAt, tz.local),
+      scheduledDate: _localScheduleDate(scheduledAt),
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'cache_update',
@@ -107,7 +106,7 @@ class NotificationService {
         id: id,
         title: '日程提醒 · ${task.title}',
         body: task.note.isEmpty ? '日程即将开始' : task.note,
-        scheduledDate: tz.TZDateTime.from(notifyAt, tz.local),
+        scheduledDate: _localScheduleDate(notifyAt),
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'task_reminder',
@@ -191,11 +190,11 @@ class NotificationService {
           body:
               '${settings.reminderLeadMinutes} 分钟后上课'
               ' · ${course.location} · ${course.teacher}',
-          scheduledDate: tz.TZDateTime.from(notifyAt, tz.local),
+          scheduledDate: _localScheduleDate(notifyAt),
           notificationDetails: details,
           androidScheduleMode: isAlarm
               ? AndroidScheduleMode.alarmClock
-              : AndroidScheduleMode.inexactAllowWhileIdle,
+              : AndroidScheduleMode.exactAllowWhileIdle,
           payload: course.name,
         );
         scheduled++;
@@ -209,5 +208,16 @@ class NotificationService {
         '${course.term}|${course.name}|${course.weekday}|'
         '${course.startPeriod}|${date.year}-${date.month}-${date.day}';
     return source.hashCode & 0x7fffffff;
+  }
+
+  tz.TZDateTime _localScheduleDate(DateTime value) {
+    return tz.TZDateTime(
+      tz.local,
+      value.year,
+      value.month,
+      value.day,
+      value.hour,
+      value.minute,
+    );
   }
 }

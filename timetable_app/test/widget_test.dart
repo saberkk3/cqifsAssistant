@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timetable_app/models/course.dart';
 import 'package:timetable_app/services/schedule_parser.dart';
+import 'package:timetable_app/services/schedule_utils.dart';
 
 void main() {
   test('解析课程名称、老师、地点、星期和周次', () {
@@ -48,5 +50,49 @@ void main() {
     expect(parsed.courses.first.startPeriod, 1);
     expect(parsed.courses.first.endPeriod, 2);
     expect(parsed.courses.first.weeks, List.generate(16, (index) => index + 1));
+  });
+
+  test('课表节次和提醒开始时间使用学校实际时间', () {
+    const course = Course(
+      name: '大学英语',
+      teacher: '李四',
+      location: '南4',
+      weekday: 3,
+      startPeriod: 5,
+      endPeriod: 6,
+      weeks: [1],
+      term: '2026-2027-1',
+      timeText: '',
+      displayTime: '',
+      weekPeriodRaw: '',
+    );
+
+    expect(periodTimeRange(1), '08:00-08:45');
+    expect(periodTimeRange(5), '14:00-14:45');
+    expect(
+      courseStartTime(DateTime(2026, 10, 21), course),
+      DateTime(2026, 10, 21, 14),
+    );
+  });
+
+  test('课程包含明确时间时优先使用显示时间', () {
+    const course = Course(
+      name: '高等数学',
+      teacher: '张三',
+      location: 'A101',
+      weekday: 1,
+      startPeriod: 2,
+      endPeriod: 2,
+      weeks: [1],
+      term: '2026-2027-1',
+      timeText: '',
+      displayTime: '08:55-09:40',
+      weekPeriodRaw: '',
+    );
+
+    expect(
+      courseStartTime(DateTime(2026, 10, 19), course),
+      DateTime(2026, 10, 19, 8, 55),
+    );
   });
 }
