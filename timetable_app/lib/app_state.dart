@@ -140,6 +140,7 @@ class AppState extends ChangeNotifier {
       }
 
       await notifications.init();
+      await _rescheduleReminders();
 
       // Cancel periodic jobs left by older app versions. This version never
       // performs an automatic network refresh.
@@ -150,7 +151,6 @@ class AppState extends ChangeNotifier {
         // Background scheduling is best-effort.
       }
 
-      await _scheduleCacheReminder();
       await _updateHomeWidget();
     } catch (error) {
       _error = _friendlyError(error);
