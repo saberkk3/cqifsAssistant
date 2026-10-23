@@ -94,7 +94,10 @@ List<Course> coursesForDay(
 DateTime? courseStartTime(DateTime date, Course course) {
   final displayStart = _timeFromText(course.displayTime);
   final textStart = _timeFromText(course.timeText);
-  final parsedStart = displayStart ?? textStart;
+  // The school's exported display time can lag behind the real bell schedule.
+  // Official courses therefore use the authoritative period table; only
+  // user-created courses may override it with a custom clock time.
+  final parsedStart = course.isCustom ? displayStart ?? textStart : null;
   if (parsedStart != null) {
     return DateTime(
       date.year,

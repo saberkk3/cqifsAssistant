@@ -44,3 +44,6 @@ release_archive/
 .DS_Store
 Thumbs.db
 *.log
+
+# Local-only WeChat mini program
+miniprogram_beta1.0/

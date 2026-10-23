@@ -75,7 +75,7 @@ void main() {
     );
   });
 
-  test('课程包含明确时间时优先使用显示时间', () {
+  test('自定义课程优先使用用户设置的显示时间', () {
     const course = Course(
       name: '高等数学',
       teacher: '张三',
@@ -88,11 +88,33 @@ void main() {
       timeText: '',
       displayTime: '08:55-09:40',
       weekPeriodRaw: '',
+      isCustom: true,
     );
 
     expect(
       courseStartTime(DateTime(2026, 10, 19), course),
       DateTime(2026, 10, 19, 8, 55),
+    );
+  });
+
+  test('教务课程忽略滞后的导出显示时间并使用真实节次时间', () {
+    const course = Course(
+      name: '新闻学概论',
+      teacher: '王迎新',
+      location: '1A204',
+      weekday: 1,
+      startPeriod: 3,
+      endPeriod: 4,
+      weeks: [1],
+      term: '2026-2027-1',
+      timeText: '星期一 第3-4节 第1-16周',
+      displayTime: '第三四节 10:25-12:00',
+      weekPeriodRaw: '1-16(周)[03-04节]',
+    );
+
+    expect(
+      courseStartTime(DateTime(2026, 10, 19), course),
+      DateTime(2026, 10, 19, 10, 10),
     );
   });
 }
