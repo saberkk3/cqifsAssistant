@@ -11,6 +11,8 @@ import '../widgets/course_card.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/utility_usage_sparkline.dart';
 import 'course_editor_screen.dart';
+import 'empty_classroom_screen.dart';
+import 'inspiration_screen.dart';
 import 'login_screen.dart';
 import 'map_screen.dart';
 import 'settings_screen.dart';
@@ -73,25 +75,16 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(height: 12),
               _GuestModeBanner(onLogin: () => _openLogin(context)),
             ],
-            if (state.sessionExpired) ...[
-              const SizedBox(height: 12),
-              _LoginExpiredBanner(onLogin: () => _openLogin(context)),
-            ] else if (state.cacheReminderDue) ...[
+            if (!state.sessionExpired && state.cacheReminderDue) ...[
               const SizedBox(height: 12),
               _CacheReminderBanner(
                 ageDays: state.cacheAgeDays ?? 0,
                 onLogin: () => _openLogin(context),
               ),
-            ] else if (state.error != null) ...[
+            ] else if (!state.sessionExpired && state.error != null) ...[
               const SizedBox(height: 12),
               _ErrorBanner(message: state.error!),
             ],
-            const SizedBox(height: 22),
-            _UtilityBalanceSection(
-              snapshot: state.utilitySnapshot,
-              history: state.utilityHistory,
-              onTap: onOpenUtility,
-            ),
             const SizedBox(height: 22),
             _SectionTitle(title: '今日课程', trailing: '${todayCourses.length} 节'),
             const SizedBox(height: 10),
@@ -135,6 +128,16 @@ class HomeScreen extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 20),
+            _InspirationHomeCard(
+              onTap: () => _openPage(context, const InspirationScreen()),
+            ),
+            const SizedBox(height: 20),
+            _UtilityBalanceSection(
+              snapshot: state.utilitySnapshot,
+              history: state.utilityHistory,
+              onTap: onOpenUtility,
+            ),
+            const SizedBox(height: 20),
             const _SectionTitle(title: '快捷功能', trailing: '更多工具'),
             const SizedBox(height: 12),
             GridView.count(
@@ -159,6 +162,11 @@ class HomeScreen extends StatelessWidget {
                   icon: Icons.sync_rounded,
                   label: '刷新课表',
                   onTap: () => _refreshOrLogin(context, state),
+                ),
+                _QuickAction(
+                  icon: Icons.meeting_room_outlined,
+                  label: '教室课表',
+                  onTap: () => _openPage(context, const EmptyClassroomScreen()),
                 ),
                 _QuickAction(
                   icon: Icons.settings_outlined,
@@ -191,7 +199,6 @@ class HomeScreen extends StatelessWidget {
 
   Future<void> _refreshOrLogin(BuildContext context, AppState state) async {
     if (state.needsLogin) {
-      await _openLogin(context);
       return;
     }
     await state.refreshNow();
@@ -676,6 +683,92 @@ class _QuickAction extends StatelessWidget {
   }
 }
 
+class _InspirationHomeCard extends StatelessWidget {
+  const _InspirationHomeCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final isDark = context.appTheme.isDark;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [const Color(0xFF1C1C1C), const Color(0xFF111111)]
+                  : [
+                      primary,
+                      Color.alphaBlend(
+                        Colors.black.withValues(alpha: 0.16),
+                        primary,
+                      ),
+                    ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(17),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 15),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '每日灵感',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 5),
+                    Text(
+                      '记录此刻的想法，留住每一个突然出现的念头',
+                      style: TextStyle(
+                        color: Color(0xFFD9E9FF),
+                        fontSize: 11,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.arrow_forward_rounded,
+                color: Colors.white,
+                size: 23,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HomeTaskCard extends StatelessWidget {
   const _HomeTaskCard({required this.task});
 
@@ -732,37 +825,6 @@ class _HomeTaskCard extends StatelessWidget {
             '${task.endAt.month}-${task.endAt.day}',
             style: TextStyle(color: context.appMuted, fontSize: 11),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LoginExpiredBanner extends StatelessWidget {
-  const _LoginExpiredBanner({required this.onLogin});
-
-  final VoidCallback onLogin;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF7E6),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFD58A)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.lock_clock_outlined, color: AppColors.warning),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              '教务登录已失效，当前显示缓存课表',
-              style: TextStyle(color: AppColors.warning, fontSize: 12),
-            ),
-          ),
-          TextButton(onPressed: onLogin, child: const Text('重新登录')),
         ],
       ),
     );

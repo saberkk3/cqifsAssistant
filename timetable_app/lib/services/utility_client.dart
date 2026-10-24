@@ -338,11 +338,38 @@ class UtilityClient {
     if (apiStatus != '200') {
       throw UtilityException(message.isEmpty ? '创建充值订单失败' : message);
     }
-    final orderToken = (data['resultObject'] ?? '').toString();
-    if (orderToken.isEmpty) {
+    return _paymentUrlFromResult(data['resultObject'], message);
+  }
+
+  String _paymentUrlFromResult(Object? value, String message) {
+    if (value is Map) {
+      for (final key in const [
+        'payUrl',
+        'paymentUrl',
+        'redirectUrl',
+        'url',
+        'orderToken',
+        'token',
+        'orderNo',
+        'orderId',
+        'id',
+      ]) {
+        final candidate = value[key];
+        if (candidate != null && candidate.toString().trim().isNotEmpty) {
+          return _paymentUrlFromResult(candidate, message);
+        }
+      }
+    }
+    final token = value?.toString().trim() ?? '';
+    if (token.isEmpty) {
       throw UtilityException(message.isEmpty ? '充值平台未返回支付单号' : message);
     }
-    return 'https://tcsisu.educationgroup.cn/ykt/api/pay/$orderToken';
+    final parsed = Uri.tryParse(token);
+    if (parsed != null &&
+        (parsed.scheme == 'http' || parsed.scheme == 'https')) {
+      return token;
+    }
+    return 'https://tcsisu.educationgroup.cn/ykt/api/pay/$token';
   }
 
   Future<String> beginAuthorization() async {

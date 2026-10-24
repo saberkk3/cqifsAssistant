@@ -3,12 +3,12 @@ import 'dart:typed_data';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
-import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/course.dart';
 import '../models/empty_classroom.dart';
+import 'classroom_parser.dart';
 import 'schedule_parser.dart';
 
 class LoginException implements Exception {
@@ -202,59 +202,142 @@ class JwClient {
     );
   }
 
-  Future<EmptyClassroomResult> fetchEmptyClassrooms({
+  Future<EmptyClassroomResult> fetchClassroomTimetable({
     required int week,
-    required int weekday,
     String? term,
     String campus = '',
+    String building = '',
   }) async {
     await init();
-    final formResponse = await _client.get<String>(
-      '$eduRoot/kbxx/jsjy_query',
+    final parser = ClassroomParser();
+    final pageResponse = await _client.get<String>(
+      '$eduRoot/kbcx/kbxx_classroom',
       options: Options(
         responseType: ResponseType.plain,
         headers: {'Referer': '$baseUrl$eduRoot/framework/xsMain.jsp'},
       ),
     );
-    final formHtml = formResponse.data ?? '';
-    _ensureLoggedInPage(formHtml);
-    final formDocument = html_parser.parse(formHtml);
-    final timeMode = _selectedOptionValue(formDocument, 'kbjcmsid');
-    if (timeMode == null || timeMode.isEmpty) {
-      throw const FormatException('空教室页面缺少节次模式，学校系统可能已更新');
+    final pageHtml = pageResponse.data ?? '';
+    _ensureLoggedInPage(pageHtml);
+    final page = parser.parseQueryPage(pageHtml);
+
+    final wantedTerm = term?.isNotEmpty == true ? term! : page.term;
+    if (wantedTerm.isEmpty) {
+      throw const FormatException('无法确定教室课表查询学期');
     }
-    final defaultTerm = _inputValue(formDocument, 'xnxqh');
-    final wantedTerm = term?.isNotEmpty == true ? term! : defaultTerm;
-    if (wantedTerm == null || wantedTerm.isEmpty) {
-      throw const FormatException('无法确定空教室查询学期');
+    final wantedCampus = campus.isNotEmpty ? campus : page.campus;
+    final wantedBuilding = building.isNotEmpty ? building : page.building;
+
+    var buildings = page.buildings;
+    if (wantedCampus.isNotEmpty) {
+      try {
+        final buildingResponse = await _client.get<String>(
+          '$eduRoot/kbcx/getJxlByAjax',
+          queryParameters: {'xqid': wantedCampus},
+          options: Options(
+            responseType: ResponseType.plain,
+            headers: {
+              'Referer': '$baseUrl$eduRoot/kbcx/kbxx_classroom',
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+          ),
+        );
+        var remoteBuildings = parser.parseBuildingsJson(
+          buildingResponse.data ?? '',
+        );
+        if (remoteBuildings.isEmpty) {
+          final fallbackResponse = await _client.post<String>(
+            '$eduRoot/kbcx/getJxlByAjax',
+            data: {'xqid': wantedCampus},
+            options: Options(
+              responseType: ResponseType.plain,
+              contentType: Headers.formUrlEncodedContentType,
+              headers: {
+                'Referer': '$baseUrl$eduRoot/kbcx/kbxx_classroom',
+                'X-Requested-With': 'XMLHttpRequest',
+              },
+            ),
+          );
+          remoteBuildings = parser.parseBuildingsJson(
+            fallbackResponse.data ?? '',
+          );
+        }
+        if (remoteBuildings.isNotEmpty) {
+          buildings = remoteBuildings;
+        }
+      } on DioException {
+        // The page already contains a fallback building list.
+      }
     }
-    final campuses = _campusOptions(formDocument);
+
+    final data = <String, dynamic>{
+      'xnxqh': wantedTerm,
+      'skyx': '',
+      'xqid': wantedCampus,
+      'jzwid': wantedBuilding,
+      'jxlvalue': wantedBuilding,
+      'skjsid': '',
+      'skjs': '',
+      'jsid': '',
+      'zc1': '$week',
+      'zc2': '$week',
+      'skxq1': '1',
+      'skxq2': '7',
+      'xq': '1',
+      'xq2': '7',
+      'jc1': '',
+      'jc2': '',
+    };
+    if (page.timeMode.isNotEmpty) {
+      data['kbjcmsid'] = page.timeMode;
+    }
+
     final queryResponse = await _client.post<String>(
-      '$eduRoot/kbxx/jsjy_query2',
-      data: {
-        'xnxqh': wantedTerm,
-        'typewhere': 'jszq',
-        'kbjcmsid': timeMode,
-        'xqbh': campus,
-        'zc': '$week',
-        'zc2': '$week',
-        'xq': '$weekday',
-        'xq2': '$weekday',
-      },
+      '$eduRoot/kbcx/kbxx_classroom_ifr',
+      data: data,
       options: Options(
         responseType: ResponseType.plain,
         contentType: Headers.formUrlEncodedContentType,
-        headers: {'Referer': '$baseUrl$eduRoot/kbxx/jsjy_query'},
+        headers: {
+          'Referer': '$baseUrl$eduRoot/kbcx/kbxx_classroom',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
       ),
     );
     final queryHtml = queryResponse.data ?? '';
     _ensureLoggedInPage(queryHtml);
-    final parsed = _parseEmptyRoomGrid(queryHtml);
+    final table = parser.parseTable(queryHtml);
+
+    String buildingLabel = '';
+    for (final item in buildings) {
+      if (item.value == wantedBuilding) {
+        buildingLabel = item.label;
+        break;
+      }
+    }
+    if (buildingLabel.isEmpty &&
+        wantedBuilding.isEmpty &&
+        buildings.length == 1) {
+      buildingLabel = buildings.first.label;
+    }
+
     return EmptyClassroomResult(
       term: wantedTerm,
-      campuses: campuses,
-      periods: parsed.$1,
-      rooms: parsed.$2,
+      campuses: page.campuses,
+      buildings: buildings,
+      campus: wantedCampus,
+      building: wantedBuilding,
+      periods: table.periods,
+      rooms: table.rooms
+          .map(
+            (room) => EmptyClassroom(
+              name: room.name,
+              building: buildingLabel,
+              capacity: room.capacity,
+              timetable: room.timetable,
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -322,110 +405,5 @@ class JwClient {
         html.contains('"flag1":2')) {
       throw const SessionExpiredException();
     }
-  }
-
-  String? _inputValue(dom.Document document, String name) {
-    final input = document.querySelector('input[name="$name"]');
-    return input == null ? null : _attribute(input, 'value');
-  }
-
-  String? _selectedOptionValue(dom.Document document, String name) {
-    final select = document.querySelector('select[name="$name"]');
-    if (select == null) {
-      return null;
-    }
-    final option =
-        select.querySelector('option[selected]') ??
-        select.querySelector('option');
-    return option == null ? null : _attribute(option, 'value');
-  }
-
-  List<EmptyRoomCampus> _campusOptions(dom.Document document) {
-    final select = document.querySelector('select[name="xqbh"]');
-    if (select == null) {
-      return const [];
-    }
-    return select
-        .querySelectorAll('option')
-        .map(
-          (option) => EmptyRoomCampus(
-            value: _attribute(option, 'value') ?? '',
-            label: option.text.trim(),
-          ),
-        )
-        .where((campus) => campus.value.isNotEmpty)
-        .toList();
-  }
-
-  (List<EmptyRoomPeriod>, List<EmptyClassroom>) _parseEmptyRoomGrid(
-    String html,
-  ) {
-    final document = html_parser.parse(html);
-    final table = document.querySelector('#dataList');
-    if (table == null) {
-      throw const FormatException('空教室结果缺少 dataList 表格');
-    }
-    final periods = <EmptyRoomPeriod>[];
-    for (final cell in table.querySelectorAll('th[tdvalue]')) {
-      final code = _attribute(cell, 'tdvalue') ?? '';
-      if (code.isEmpty) {
-        continue;
-      }
-      periods.add(
-        EmptyRoomPeriod(
-          code: code,
-          startTime: _attribute(cell, 'tdKssj'),
-          endTime: _attribute(cell, 'tdJssj'),
-        ),
-      );
-    }
-    final rooms = <EmptyClassroom>[];
-    for (final row in table.querySelectorAll('tr')) {
-      final cells = row.children.where((element) => element.localName == 'td');
-      if (cells.length < 2) {
-        continue;
-      }
-      final cellList = cells.toList();
-      final label = cellList.first.text
-          .replaceAll('\u00a0', ' ')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
-      if (label.isEmpty) {
-        continue;
-      }
-      final match = RegExp(
-        r'^(.*?)\s*[(（]\s*(\d{1,5})(?:\s*/\s*\d{1,5})?\s*[)）]\s*$',
-      ).firstMatch(label);
-      final roomName = match?.group(1)?.trim() ?? label;
-      final capacity = int.tryParse(match?.group(2) ?? '');
-      final freeFlags = cellList
-          .skip(1)
-          .map((cell) => cell.text.replaceAll('\u00a0', ' ').trim().isEmpty)
-          .toList();
-      if (freeFlags.length != periods.length) {
-        continue;
-      }
-      final freeCodes = <String>[
-        for (var index = 0; index < periods.length; index++)
-          if (freeFlags[index]) periods[index].code,
-      ];
-      rooms.add(
-        EmptyClassroom(
-          name: roomName,
-          capacity: capacity,
-          freePeriodCodes: freeCodes,
-        ),
-      );
-    }
-    return (periods, rooms);
-  }
-
-  String? _attribute(dom.Element element, String name) {
-    for (final entry in element.attributes.entries) {
-      if (entry.key.toString().toLowerCase() == name.toLowerCase()) {
-        return entry.value;
-      }
-    }
-    return null;
   }
 }

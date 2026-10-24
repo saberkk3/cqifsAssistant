@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../app_palette.dart';
@@ -28,6 +31,8 @@ class UtilityMeterScreen extends StatefulWidget {
 }
 
 class _UtilityMeterScreenState extends State<UtilityMeterScreen> {
+  static const _rechargeEnabled = false;
+
   late UtilitySnapshot _snapshot;
   bool _refreshing = false;
   String? _error;
@@ -232,13 +237,15 @@ class _UtilityMeterScreenState extends State<UtilityMeterScreen> {
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: _openRecharge,
+              onPressed: _rechargeEnabled ? _openRecharge : null,
               icon: Icon(
-                _isElectricity
-                    ? Icons.bolt_outlined
-                    : Icons.water_drop_outlined,
+                _rechargeEnabled
+                    ? _isElectricity
+                          ? Icons.bolt_outlined
+                          : Icons.water_drop_outlined
+                    : Icons.lock_clock_outlined,
               ),
-              label: Text(_isElectricity ? '电费充值' : '水费充值'),
+              label: Text(_rechargeEnabled ? '充值' : '充值（暂时关闭）'),
             ),
             const SizedBox(height: 24),
             Row(
@@ -570,9 +577,17 @@ class UtilityPaymentWebView extends StatefulWidget {
 }
 
 class _UtilityPaymentWebViewState extends State<UtilityPaymentWebView> {
+  static const _shareChannel = MethodChannel(
+    'com.cqwywsxy.timetable_app/share',
+  );
+
   late final WebViewController _controller;
   int _progress = 0;
   String _currentUrl = '';
+  bool _paymentFailed = false;
+  bool _sharing = false;
+  bool _openingWechat = false;
+  bool _autoWechatAttempted = false;
 
   @override
   void initState() {
@@ -590,27 +605,142 @@ class _UtilityPaymentWebViewState extends State<UtilityPaymentWebView> {
           },
           onPageStarted: (url) {
             if (mounted) {
-              setState(() => _currentUrl = url);
-            }
-          },
-          onPageFinished: (url) {
-            if (mounted) {
               setState(() {
                 _currentUrl = url;
-                _progress = 100;
+                _paymentFailed = false;
               });
             }
+          },
+          onPageFinished: (url) async {
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _currentUrl = url;
+              _progress = 100;
+            });
+            try {
+              final title = await _controller.getTitle() ?? '';
+              if (mounted) {
+                setState(() {
+                  _paymentFailed =
+                      title.contains('支付失败') || title.contains('付款失败');
+                });
+              }
+            } catch (_) {
+              // Title detection is best-effort.
+            }
+          },
+          onNavigationRequest: (request) {
+            final uri = Uri.tryParse(request.url);
+            final scheme = uri?.scheme.toLowerCase() ?? '';
+            if (scheme.isNotEmpty &&
+                scheme != 'http' &&
+                scheme != 'https' &&
+                scheme != 'about' &&
+                scheme != 'data' &&
+                scheme != 'blob' &&
+                scheme != 'javascript') {
+              unawaited(launchUrl(uri!, mode: LaunchMode.externalApplication));
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
           },
         ),
       )
       ..loadRequest(Uri.parse(widget.paymentUrl));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_autoWechatAttempted) {
+        _autoWechatAttempted = true;
+        _openInWechat(auto: true);
+      }
+    });
   }
 
   Future<void> _copyPaymentUrl() async {
     await Clipboard.setData(ClipboardData(text: _currentUrl));
     if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('支付链接已复制，可发送到微信继续付款')));
+      _showMessage('支付链接已复制，可以粘贴到微信中打开');
+    }
+  }
+
+  Future<void> _openInBrowser() async {
+    final uri = Uri.tryParse(_currentUrl);
+    if (uri == null) {
+      _showMessage('支付链接格式异常');
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      _showMessage('无法打开浏览器');
+    }
+  }
+
+  Future<void> _shareToWechat() async {
+    if (_sharing) {
+      return;
+    }
+    setState(() => _sharing = true);
+    try {
+      final launched = await _shareChannel.invokeMethod<bool>('shareToWechat', {
+        'text': '${widget.title}\n$_currentUrl',
+        'title': widget.title,
+      });
+      if (mounted) {
+        _showMessage(
+          launched == false ? '已打开系统分享，请选择微信发送并点击链接' : '已打开微信，请选择聊天发送并点击支付链接',
+        );
+      }
+    } on PlatformException {
+      await Clipboard.setData(ClipboardData(text: _currentUrl));
+      if (mounted) {
+        _showMessage('无法直接调用微信，支付链接已复制');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _sharing = false);
+      }
+    }
+  }
+
+  Future<void> _openInWechat({bool auto = false}) async {
+    if (_openingWechat) {
+      return;
+    }
+    setState(() => _openingWechat = true);
+    try {
+      final launched = await _shareChannel.invokeMethod<bool>('openInWechat', {
+        'url': _currentUrl,
+      });
+      if (!mounted || launched == true) {
+        return;
+      }
+      if (auto) {
+        setState(() => _paymentFailed = true);
+      }
+      _showMessage('微信未能直接打开支付页，可点击“发送链接”后再从微信打开');
+    } on PlatformException {
+      if (auto && mounted) {
+        setState(() => _paymentFailed = true);
+      }
+      if (mounted) {
+        _showMessage('当前设备无法直接调用微信');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _openingWechat = false);
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _recreateOrder() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
     }
   }
 
@@ -635,8 +765,100 @@ class _UtilityPaymentWebViewState extends State<UtilityPaymentWebView> {
               minHeight: 2,
               color: Theme.of(context).colorScheme.primary,
             ),
+          if (_paymentFailed) _buildFailureGuide(),
           Expanded(child: WebViewWidget(controller: _controller)),
+          _buildPaymentActions(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFailureGuide() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        '学校支付页未能在 App 内直接拉起微信支付。'
+        '请点击下方“微信支付”重试；若微信没有响应，'
+        '可点击“发送链接”后在微信聊天中打开。',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurface,
+          fontSize: 12,
+          height: 1.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentActions() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            top: BorderSide(color: Theme.of(context).dividerColor),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _openInBrowser,
+                    icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                    label: const Text('浏览器打开'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _openingWechat ? null : _openInWechat,
+                    icon: _openingWechat
+                        ? const SizedBox(
+                            width: 17,
+                            height: 17,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.wechat_rounded, size: 18),
+                    label: const Text('微信支付'),
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton.icon(
+                  onPressed: _sharing ? null : _shareToWechat,
+                  icon: _sharing
+                      ? const SizedBox(
+                          width: 15,
+                          height: 15,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                  label: const Text('发送链接'),
+                ),
+                const SizedBox(width: 6),
+                TextButton.icon(
+                  onPressed: _recreateOrder,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('返回重新下单'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

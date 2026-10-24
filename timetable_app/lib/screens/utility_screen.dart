@@ -260,11 +260,9 @@ class _UtilityScreenState extends State<UtilityScreen> {
               ),
               const SizedBox(height: 18),
               _MessageCard(
-                icon: Icons.shield_outlined,
-                text:
-                    '水表和电表已拆分为独立页面。充值操作会创建学校官方订单，'
-                    '付款前请再次核对房间和金额。',
-                color: Theme.of(context).colorScheme.primary,
+                icon: Icons.lock_clock_outlined,
+                text: '水电充值（暂时关闭）。余额、用量趋势和充值记录仍可正常查询。',
+                color: AppColors.warning,
               ),
             ],
           ],

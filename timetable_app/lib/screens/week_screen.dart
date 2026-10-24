@@ -12,7 +12,6 @@ import '../services/schedule_utils.dart';
 import '../widgets/course_card.dart';
 import '../widgets/empty_state.dart';
 import 'course_editor_screen.dart';
-import 'login_screen.dart';
 
 class WeekScreen extends StatefulWidget {
   const WeekScreen({super.key});
@@ -648,8 +647,6 @@ class _WeekScreenState extends State<WeekScreen> {
 
   Future<void> _refreshOrLogin(BuildContext context, AppState state) async {
     if (state.needsLogin) {
-      await Navigator.of(context)
-          .push<void>(MaterialPageRoute(builder: (_) => const LoginScreen()));
       return;
     }
     await state.refreshNow();
