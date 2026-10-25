@@ -77,8 +77,7 @@ void main() {
       }
       return '<td><div class="kbcontent1">&nbsp;</div></td>';
     }).join();
-    final html =
-        '''
+    final html = '''
       <table id="kbtable">
         <thead>
           <tr><td>教室</td><td>星期一</td></tr>
@@ -92,10 +91,10 @@ void main() {
     final room = data.rooms.single;
 
     expect(data.periods, hasLength(7));
-    expect(data.periods.first.startTime, '08:00');
-    expect(data.periods.first.endTime, '09:40');
+    expect(data.periods.first.startTime, '08:30');
+    expect(data.periods.first.endTime, '10:05');
     expect(data.periods.last.code, '13');
-    expect(data.periods.last.startTime, '22:40');
+    expect(data.periods.last.startTime, '20:40');
     expect(room.name, 'A101');
     expect(room.capacity, 60);
     expect(room.contentsFor(1, '0102').first, contains('高等数学'));

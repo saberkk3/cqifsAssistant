@@ -67,11 +67,12 @@ void main() {
       weekPeriodRaw: '',
     );
 
-    expect(periodTimeRange(1), '08:00-08:45');
-    expect(periodTimeRange(5), '14:00-14:45');
+    expect(periodTimeRange(1), '08:30-09:15');
+    expect(periodTimeRange(5), '12:45-13:30');
+    expect(periodTimeRange(13), '20:40-21:25');
     expect(
       courseStartTime(DateTime(2026, 10, 21), course),
-      DateTime(2026, 10, 21, 14),
+      DateTime(2026, 10, 21, 12, 45),
     );
   });
 
@@ -114,7 +115,7 @@ void main() {
 
     expect(
       courseStartTime(DateTime(2026, 10, 19), course),
-      DateTime(2026, 10, 19, 10, 10),
+      DateTime(2026, 10, 19, 10, 25),
     );
   });
 }
