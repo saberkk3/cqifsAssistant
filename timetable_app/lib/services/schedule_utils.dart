@@ -42,7 +42,15 @@ DateTime _firstMondayOnOrAfter(DateTime value) {
   return date.add(Duration(days: (8 - date.weekday) % 7));
 }
 
-DateTime? termStartDate(String term) {
+DateTime _mondayOfWeekContaining(DateTime value) {
+  final date = dateOnly(value);
+  return date.subtract(Duration(days: date.weekday - 1));
+}
+
+DateTime? termStartDate(String term, {DateTime? firstWeekStart}) {
+  if (firstWeekStart != null) {
+    return dateOnly(firstWeekStart);
+  }
   final parts = term.split('-');
   if (parts.length != 3) {
     return null;
@@ -54,13 +62,13 @@ DateTime? termStartDate(String term) {
     return null;
   }
   if (semester == 1) {
-    return _firstMondayOnOrAfter(DateTime(startYear, 9, 1));
+    return _mondayOfWeekContaining(DateTime(startYear, 9, 1));
   }
   return _firstMondayOnOrAfter(DateTime(endYear, 2, 20));
 }
 
-int? weekNumberForDate(String term, DateTime date) {
-  final start = termStartDate(term);
+int? weekNumberForDate(String term, DateTime date, {DateTime? firstWeekStart}) {
+  final start = termStartDate(term, firstWeekStart: firstWeekStart);
   if (start == null) {
     return null;
   }
@@ -75,8 +83,13 @@ int? weekNumberForDate(String term, DateTime date) {
   return week;
 }
 
-int displayedCurrentWeek(String term) {
-  return weekNumberForDate(term, DateTime.now()) ?? 1;
+int displayedCurrentWeek(String term, {DateTime? firstWeekStart}) {
+  return weekNumberForDate(
+        term,
+        DateTime.now(),
+        firstWeekStart: firstWeekStart,
+      ) ??
+      1;
 }
 
 List<Course> coursesForDay(

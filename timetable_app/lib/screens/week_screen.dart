@@ -45,8 +45,10 @@ class _WeekScreenState extends State<WeekScreen> {
     final backgroundImagePath = state.settings.timetableBackgroundImagePath;
     final hasBackgroundImage = _hasBackgroundImage(state);
     final totalWeeks = _totalWeeks(state);
-    final weekStart = termStartDate(state.term)
-        ?.add(Duration(days: (_week - 1) * 7));
+    final weekStart = termStartDate(
+      state.term,
+      firstWeekStart: state.settings.firstWeekStarts[state.term],
+    )?.add(Duration(days: (_week - 1) * 7));
     final weekEnd = weekStart?.add(const Duration(days: 6));
     final dayCourses = coursesForDay(state.courses, weekday: _day, week: _week);
     final weekCourses =
@@ -377,8 +379,10 @@ class _WeekScreenState extends State<WeekScreen> {
     final timetableBackground =
         customTheme?.timetableBackground ?? Colors.white;
     final hasBackgroundImage = _hasBackgroundImage(state);
-    final weekStart = termStartDate(state.term)
-        ?.add(Duration(days: (_week - 1) * 7));
+    final weekStart = termStartDate(
+      state.term,
+      firstWeekStart: state.settings.firstWeekStarts[state.term],
+    )?.add(Duration(days: (_week - 1) * 7));
     final today = dateOnly(DateTime.now());
 
     String periodTime(int period) {

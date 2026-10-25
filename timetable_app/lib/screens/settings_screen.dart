@@ -9,6 +9,7 @@ import '../app_state.dart';
 import '../app_theme.dart';
 import '../app_palette.dart';
 import '../services/app_settings.dart';
+import '../services/schedule_utils.dart';
 import 'login_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -269,6 +270,48 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           _SectionCard(
+            title: '教学周',
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.calendar_month_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                title: const Text('第一周周一'),
+                subtitle: Text(
+                  _firstWeekDescription(state),
+                  style: TextStyle(color: context.appMuted, fontSize: 11),
+                ),
+                trailing: const Icon(Icons.edit_calendar_outlined),
+                onTap: state.term.isEmpty
+                    ? null
+                    : () => _pickFirstWeek(context, state),
+              ),
+              if (state.firstWeekStart != null)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => state.setFirstWeekStart(null),
+                    icon: const Icon(Icons.restart_alt_rounded, size: 17),
+                    label: const Text('恢复自动'),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '修改后会同步周课表日期、今日课程周次、教室课表和上课提醒。',
+                  style: TextStyle(
+                    color: context.appMuted,
+                    fontSize: 10,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _SectionCard(
             title: '上课提醒',
             children: [
               SwitchListTile(
@@ -466,7 +509,7 @@ class SettingsScreen extends StatelessWidget {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 title: const Text('重外小助手'),
-                subtitle: const Text('版本 2.6.5 · Android + Flutter'),
+                subtitle: const Text('版本 2.6.7 · Android + Flutter'),
               ),
               const Divider(),
               ListTile(
@@ -498,6 +541,37 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _firstWeekDescription(AppState state) {
+    if (state.term.isEmpty) {
+      return '请先获取课表学期';
+    }
+    final custom = state.firstWeekStart;
+    final start = custom ?? termStartDate(state.term);
+    if (start == null) {
+      return '暂未计算';
+    }
+    return '${custom == null ? '自动' : '自定义'}：${_formatDate(start)}';
+  }
+
+  Future<void> _pickFirstWeek(BuildContext context, AppState state) async {
+    final now = DateTime.now();
+    final current =
+        state.firstWeekStart ??
+        termStartDate(state.term) ??
+        DateTime(now.year, now.month, now.day);
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime(now.year - 2, 1, 1),
+      lastDate: DateTime(now.year + 2, 12, 31),
+      helpText: '选择第一周周一',
+      selectableDayPredicate: (date) => date.weekday == DateTime.monday,
+    );
+    if (selected != null) {
+      await state.setFirstWeekStart(selected);
+    }
   }
 
   Future<void> _confirmLogout(BuildContext context, AppState state) async {
@@ -583,6 +657,10 @@ class SettingsScreen extends StatelessWidget {
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '${value.month}月${value.day}日 $hour:$minute';
+  }
+
+  String _formatDate(DateTime value) {
+    return '${value.year}年${value.month}月${value.day}日';
   }
 }
 

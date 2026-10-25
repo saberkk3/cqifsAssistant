@@ -4,6 +4,27 @@ import 'package:timetable_app/services/schedule_parser.dart';
 import 'package:timetable_app/services/schedule_utils.dart';
 
 void main() {
+  test('第一教学周从包含 9 月 1 日的周一开始', () {
+    expect(termStartDate('2026-2027-1'), DateTime(2026, 8, 31));
+    expect(weekNumberForDate('2026-2027-1', DateTime(2026, 10, 25)), 8);
+  });
+
+  test('自定义第一周日期会覆盖自动计算结果', () {
+    final customStart = DateTime(2026, 9, 7);
+    expect(
+      termStartDate('2026-2027-1', firstWeekStart: customStart),
+      customStart,
+    );
+    expect(
+      weekNumberForDate(
+        '2026-2027-1',
+        DateTime(2026, 10, 25),
+        firstWeekStart: customStart,
+      ),
+      7,
+    );
+  });
+
   test('解析课程名称、老师、地点、星期和周次', () {
     const html = '''
       <select id="xnxq01id">

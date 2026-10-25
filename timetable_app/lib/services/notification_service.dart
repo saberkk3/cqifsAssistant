@@ -175,6 +175,7 @@ class NotificationService {
     required List<Course> courses,
     required String term,
     required AppSettings settings,
+    DateTime? firstWeekStart,
   }) async {
     await init();
     await _plugin.cancelAll();
@@ -186,7 +187,11 @@ class NotificationService {
     var scheduled = 0;
     for (var offset = 0; offset < 7; offset++) {
       final date = dateOnly(now).add(Duration(days: offset));
-      final week = weekNumberForDate(term, date);
+      final week = weekNumberForDate(
+        term,
+        date,
+        firstWeekStart: firstWeekStart,
+      );
       if (week == null) {
         continue;
       }

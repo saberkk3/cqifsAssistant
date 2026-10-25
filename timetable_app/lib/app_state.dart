@@ -92,7 +92,9 @@ class AppState extends ChangeNotifier {
   UtilitySnapshot? get utilitySnapshot => _utilitySnapshot;
   List<UtilityHistoryPoint> get utilityHistory =>
       List.unmodifiable(_utilityHistory);
-  int get currentWeek => displayedCurrentWeek(_term);
+  DateTime? get firstWeekStart => _settings.firstWeekStarts[_term];
+  int get currentWeek =>
+      displayedCurrentWeek(_term, firstWeekStart: firstWeekStart);
   Color get themePrimary => _settings.themeColor.primary;
   Color get timetableBackground => Color(_settings.timetableBackgroundValue);
 
@@ -240,6 +242,24 @@ class AppState extends ChangeNotifier {
     _settings = _settings.copyWith(themeColor: color);
     final prefs = await _preferences;
     await _settings.save(prefs);
+    notifyListeners();
+  }
+
+  Future<void> setFirstWeekStart(DateTime? value) async {
+    if (_term.isEmpty) {
+      return;
+    }
+    final starts = Map<String, DateTime>.from(_settings.firstWeekStarts);
+    if (value == null) {
+      starts.remove(_term);
+    } else {
+      final date = DateTime(value.year, value.month, value.day);
+      starts[_term] = date.subtract(Duration(days: date.weekday - 1));
+    }
+    _settings = _settings.copyWith(firstWeekStarts: starts);
+    final prefs = await _preferences;
+    await _settings.save(prefs);
+    await _rescheduleReminders();
     notifyListeners();
   }
 
@@ -534,6 +554,7 @@ class AppState extends ChangeNotifier {
         courses: courses,
         term: _term,
         settings: _settings,
+        firstWeekStart: firstWeekStart,
       );
       await notifications.scheduleTaskReminders(_tasks);
     } catch (_) {
